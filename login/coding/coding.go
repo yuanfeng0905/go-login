@@ -10,6 +10,7 @@ import (
 
 	"github.com/drone/go-login/login"
 	"github.com/drone/go-login/login/internal/oauth2"
+	"github.com/drone/go-login/login/logger"
 )
 
 var _ login.Middleware = (*Config)(nil)
@@ -22,6 +23,8 @@ type Config struct {
 	Server       string
 	Scope        []string
 	Client       *http.Client
+	Logger       logger.Logger
+	Debug        bool
 }
 
 // Handler returns a http.Handler that runs h at the
@@ -30,6 +33,11 @@ type Config struct {
 // http.Request context.
 func (c *Config) Handler(h http.Handler) http.Handler {
 	server := normalizeAddress(c.Server)
+	var dumper logger.Dumper
+	if c.Debug {
+		dumper = logger.StandardDumper()
+	}
+
 	return oauth2.Handler(h, &oauth2.Config{
 		BasicAuthOff:     true,
 		Client:           c.Client,
@@ -39,6 +47,9 @@ func (c *Config) Handler(h http.Handler) http.Handler {
 		AccessTokenURL:   server + "/api/oauth/access_token",
 		AuthorizationURL: server + "/oauth_authorize.html",
 		Scope:            c.Scope,
+		Logger:           c.Logger,
+		Dumper:           dumper,
+		ExchangeMethod:   "GET",
 	})
 }
 
