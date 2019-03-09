@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/drone/go-login/login"
-	"github.com/drone/go-login/login/internal/oauth2"
 	"github.com/drone/go-login/login/logger"
 )
 
@@ -17,14 +16,11 @@ var _ login.Middleware = (*Config)(nil)
 
 // Config configures the GitLab auth provider.
 type Config struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-	Server       string
-	Scope        []string
-	Client       *http.Client
-	Logger       logger.Logger
-	Debug        bool
+	Ticket string
+	Server string
+	Client *http.Client
+	Logger logger.Logger
+	Debug  bool
 }
 
 // Handler returns a http.Handler that runs h at the
@@ -32,30 +28,15 @@ type Config struct {
 // authorization details are available to h in the
 // http.Request context.
 func (c *Config) Handler(h http.Handler) http.Handler {
-	server := normalizeAddress(c.Server)
-	var dumper logger.Dumper
-	if c.Debug {
-		dumper = logger.StandardDumper()
+	v := &handler{
+		next:   h,
+		ticket: c.Ticket,
+		server: strings.TrimSuffix(c.Server, "/"),
+		client: c.Client,
+	}
+	if v.client == nil {
+		v.client = http.DefaultClient
 	}
 
-	return oauth2.Handler(h, &oauth2.Config{
-		BasicAuthOff:     true,
-		Client:           c.Client,
-		ClientID:         c.ClientID,
-		ClientSecret:     c.ClientSecret,
-		RedirectURL:      c.RedirectURL,
-		AccessTokenURL:   server + "/api/oauth/access_token",
-		AuthorizationURL: server + "/oauth_authorize.html",
-		Scope:            c.Scope,
-		Logger:           c.Logger,
-		Dumper:           dumper,
-		ExchangeMethod:   "GET",
-	})
-}
-
-func normalizeAddress(address string) string {
-	if address == "" {
-		return "https://coding.net"
-	}
-	return strings.TrimSuffix(address, "/")
+	return v
 }

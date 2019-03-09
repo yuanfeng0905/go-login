@@ -6,10 +6,8 @@ package oauth2
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/drone/go-login/login/logger"
@@ -73,10 +71,6 @@ type Config struct {
 	// Dumper is used to dump the http.Request and
 	// http.Response for debug purposes.
 	Dumper logger.Dumper
-
-	// 支持exchange get方法
-	// FIX: 兼容coding
-	ExchangeMethod string
 }
 
 // authorizeRedirect returns a client authorization
@@ -117,13 +111,7 @@ func (c *Config) exchange(code, state string) (*token, error) {
 		v.Set("redirect_uri", c.RedirectURL)
 	}
 
-	method := c.ExchangeMethod
-	if method == "GET" {
-		c.AccessTokenURL = c.AccessTokenURL + "?" + v.Encode()
-	} else if method == "" {
-		method = "POST"
-	}
-	req, err := http.NewRequest(method, c.AccessTokenURL, strings.NewReader(v.Encode()))
+	req, err := http.NewRequest("POST", c.AccessTokenURL, strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -155,27 +143,9 @@ func (c *Config) exchange(code, state string) (*token, error) {
 	}
 
 	token := &token{}
-	buf, err := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-	if err != nil {
-		return token, err
-	}
+	err = json.NewDecoder(res.Body).Decode(token)
+	return token, err
 
-	if err := json.Unmarshal(buf, token); err == nil {
-		return token, err
-	}
-	// 如果第一解码失败，尝试解码到token2结构
-	token2 := &token2{}
-	if err1 := json.Unmarshal(buf, token2); err1 != nil {
-		return token, err1
-	}
-
-	token.AccessToken = token2.AccessToken
-	token.RefreshToken = token2.RefreshToken
-	expires, _ := strconv.Atoi(token2.Expires)
-	token.Expires = int64(expires)
-
-	return token, nil
 }
 
 func (c *Config) client() *http.Client {
